@@ -1,26 +1,32 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import { createMaterialPattern } from "@/lib/canvas/patterns";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { DrawSettings } from "@/lib/canvas/drawSettings";
+import {
+  drawCorrectedShape,
+  drawFreehandCap,
+  drawFreehandSegment,
+  drawSegment,
+  interpolateStrokePoints,
+} from "@/lib/canvas/drawPrimitives";
+import { floodFill, type Point } from "@/lib/canvas/floodFill";
+import { detectShape } from "@/lib/canvas/shapeCorrection";
 import type { MaterialId, Tool } from "@/lib/types/workflow";
 import { MATERIALS } from "@/lib/types/workflow";
 
-const CANVAS_SIZE = 512;
+export type { DrawSettings } from "@/lib/canvas/drawSettings";
 
-export interface DrawSettings {
-  tool: Tool;
-  material: MaterialId;
-  color: string;
-  brushSize: number;
-  shadowEnabled: boolean;
-  shadowIntensity: number;
-  textureStrength: number;
-}
+const CANVAS_SIZE = 512;
+const MAX_HISTORY = 40;
 
 export function useDrawingCanvas(initialMaterial: MaterialId = "wood") {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawingRef = useRef(false);
-  const lastPointRef = useRef<{ x: number; y: number } | null>(null);
+  const lastPointRef = useRef<Point | null>(null);
+  const strokePointsRef = useRef<Point[]>([]);
+  const strokeSnapshotRef = useRef<ImageData | null>(null);
+  const historyRef = useRef<ImageData[]>([]);
+  const historyIndexRef = useRef(0);
 
   const [tool, setTool] = useState<Tool>("brush");
   const [material, setMaterialState] = useState<MaterialId>(initialMaterial);
@@ -31,6 +37,10 @@ export function useDrawingCanvas(initialMaterial: MaterialId = "wood") {
   const [shadowEnabled, setShadowEnabled] = useState(true);
   const [shadowIntensity, setShadowIntensity] = useState(40);
   const [textureStrength, setTextureStrength] = useState(70);
+  const [shapeCorrection, setShapeCorrection] = useState(false);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+  const [historyReady, setHistoryReady] = useState(false);
 
   const setMaterial = useCallback((nextMaterial: MaterialId) => {
     setMaterialState(nextMaterial);
@@ -43,6 +53,69 @@ export function useDrawingCanvas(initialMaterial: MaterialId = "wood") {
     if (!canvas) return null;
     return canvas.getContext("2d");
   }, []);
+
+  const syncHistoryButtons = useCallback(() => {
+    setCanUndo(historyIndexRef.current > 0);
+    setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
+  }, []);
+
+  const restoreSnapshot = useCallback(
+    (snapshot: ImageData) => {
+      const ctx = getContext();
+      if (!ctx) return;
+      ctx.putImageData(snapshot, 0, 0);
+    },
+    [getContext],
+  );
+
+  const pushHistory = useCallback(() => {
+    const canvas = canvasRef.current;
+    const ctx = getContext();
+    if (!canvas || !ctx) return;
+
+    const snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const trimmed = historyRef.current.slice(0, historyIndexRef.current + 1);
+    trimmed.push(snapshot);
+
+    if (trimmed.length > MAX_HISTORY) {
+      trimmed.shift();
+    }
+
+    historyRef.current = trimmed;
+    historyIndexRef.current = trimmed.length - 1;
+    syncHistoryButtons();
+  }, [getContext, syncHistoryButtons]);
+
+  const initHistory = useCallback(() => {
+    const canvas = canvasRef.current;
+    const ctx = getContext();
+    if (!canvas || !ctx) return;
+
+    const empty = ctx.createImageData(canvas.width, canvas.height);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    historyRef.current = [empty];
+    historyIndexRef.current = 0;
+    syncHistoryButtons();
+    setHistoryReady(true);
+  }, [getContext, syncHistoryButtons]);
+
+  useEffect(() => {
+    initHistory();
+  }, [initHistory]);
+
+  const undo = useCallback(() => {
+    if (historyIndexRef.current <= 0) return;
+    historyIndexRef.current -= 1;
+    restoreSnapshot(historyRef.current[historyIndexRef.current]);
+    syncHistoryButtons();
+  }, [restoreSnapshot, syncHistoryButtons]);
+
+  const redo = useCallback(() => {
+    if (historyIndexRef.current >= historyRef.current.length - 1) return;
+    historyIndexRef.current += 1;
+    restoreSnapshot(historyRef.current[historyIndexRef.current]);
+    syncHistoryButtons();
+  }, [restoreSnapshot, syncHistoryButtons]);
 
   const getPoint = useCallback(
     (event: React.PointerEvent<HTMLCanvasElement>) => {
@@ -57,69 +130,6 @@ export function useDrawingCanvas(initialMaterial: MaterialId = "wood") {
       };
     },
     [],
-  );
-
-  const drawLine = useCallback(
-    (
-      from: { x: number; y: number },
-      to: { x: number; y: number },
-      settings: DrawSettings,
-    ) => {
-      const ctx = getContext();
-      if (!ctx) return;
-
-      const {
-        tool: currentTool,
-        material: currentMaterial,
-        color: currentColor,
-        brushSize: size,
-        shadowEnabled: shadows,
-        shadowIntensity,
-        textureStrength: texture,
-      } = settings;
-
-      const shadowOffset = 2 + Math.round((shadowIntensity / 100) * 4);
-      const shadowAlpha = 0.1 + (shadowIntensity / 100) * 0.35;
-
-      if (currentTool === "brush" && shadows) {
-        ctx.save();
-        ctx.globalCompositeOperation = "source-over";
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-        ctx.lineWidth = size;
-        ctx.strokeStyle = `rgba(0,0,0,${shadowAlpha})`;
-        ctx.beginPath();
-        ctx.moveTo(from.x + shadowOffset, from.y + shadowOffset);
-        ctx.lineTo(to.x + shadowOffset, to.y + shadowOffset);
-        ctx.stroke();
-        ctx.restore();
-      }
-
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.lineWidth = size;
-
-      if (currentTool === "eraser") {
-        ctx.globalCompositeOperation = "destination-out";
-        ctx.strokeStyle = "rgba(0,0,0,1)";
-      } else {
-        ctx.globalCompositeOperation = "source-over";
-        const pattern = createMaterialPattern(
-          ctx,
-          currentMaterial,
-          currentColor,
-          texture,
-        );
-        ctx.strokeStyle = pattern;
-      }
-
-      ctx.beginPath();
-      ctx.moveTo(from.x, from.y);
-      ctx.lineTo(to.x, to.y);
-      ctx.stroke();
-      ctx.globalCompositeOperation = "source-over";
-    },
-    [getContext],
   );
 
   const getSettings = useCallback(
@@ -143,41 +153,136 @@ export function useDrawingCanvas(initialMaterial: MaterialId = "wood") {
     ],
   );
 
+  const appendFreehandPoint = useCallback(
+    (ctx: CanvasRenderingContext2D, point: Point) => {
+      const settings = getSettings();
+      const last = strokePointsRef.current[strokePointsRef.current.length - 1];
+      const step = Math.max(2, settings.brushSize * 0.35);
+      const interpolated = interpolateStrokePoints(last, point, step);
+
+      for (const p of interpolated) {
+        strokePointsRef.current.push(p);
+        drawFreehandSegment(ctx, strokePointsRef.current, settings);
+      }
+    },
+    [getSettings],
+  );
+
   const handlePointerDown = useCallback(
     (event: React.PointerEvent<HTMLCanvasElement>) => {
-      event.currentTarget.setPointerCapture(event.pointerId);
-      isDrawingRef.current = true;
       const point = getPoint(event);
       if (!point) return;
+
+      const ctx = getContext();
+      const canvas = canvasRef.current;
+      if (!ctx || !canvas) return;
+
+      if (tool === "fill") {
+        floodFill(ctx, point.x, point.y, {
+          material,
+          color,
+          textureStrength,
+          brushSize,
+        });
+        pushHistory();
+        return;
+      }
+
+      event.currentTarget.setPointerCapture(event.pointerId);
+      isDrawingRef.current = true;
       lastPointRef.current = point;
-      drawLine(point, point, getSettings());
+      strokePointsRef.current = [point];
+
+      const settings = getSettings();
+      drawSegment(ctx, point, point, settings);
+
+      if (tool === "brush" && shapeCorrection) {
+        strokeSnapshotRef.current = ctx.getImageData(
+          0,
+          0,
+          canvas.width,
+          canvas.height,
+        );
+      } else {
+        strokeSnapshotRef.current = null;
+      }
     },
-    [drawLine, getPoint, getSettings],
+    [
+      brushSize,
+      color,
+      getContext,
+      getPoint,
+      getSettings,
+      material,
+      pushHistory,
+      shapeCorrection,
+      textureStrength,
+      tool,
+    ],
   );
 
   const handlePointerMove = useCallback(
     (event: React.PointerEvent<HTMLCanvasElement>) => {
-      if (!isDrawingRef.current) return;
+      if (!isDrawingRef.current || tool === "fill") return;
       const point = getPoint(event);
-      const last = lastPointRef.current;
-      if (!point || !last) return;
-      drawLine(last, point, getSettings());
+      if (!point || !lastPointRef.current) return;
+
+      const ctx = getContext();
+      if (!ctx) return;
+
+      if (tool === "brush") {
+        appendFreehandPoint(ctx, point);
+      } else {
+        const last = lastPointRef.current;
+        drawSegment(ctx, last, point, getSettings());
+        strokePointsRef.current.push(point);
+      }
+
       lastPointRef.current = point;
     },
-    [drawLine, getPoint, getSettings],
+    [appendFreehandPoint, getContext, getPoint, getSettings, tool],
   );
 
   const handlePointerUp = useCallback(() => {
+    if (!isDrawingRef.current) return;
+
+    const ctx = getContext();
+    const settings = getSettings();
+    const points = strokePointsRef.current;
+
+    if (ctx && settings.tool === "brush" && points.length > 1) {
+      drawFreehandCap(ctx, points, settings);
+
+      if (
+        shapeCorrection &&
+        strokeSnapshotRef.current &&
+        points.length > 3
+      ) {
+        const shape = detectShape(points);
+        if (shape.type !== "freehand") {
+          ctx.putImageData(strokeSnapshotRef.current, 0, 0);
+          drawCorrectedShape(ctx, shape, settings);
+        }
+      }
+    }
+
     isDrawingRef.current = false;
     lastPointRef.current = null;
-  }, []);
+    strokePointsRef.current = [];
+    strokeSnapshotRef.current = null;
+
+    if (tool !== "fill") {
+      pushHistory();
+    }
+  }, [getContext, getSettings, pushHistory, shapeCorrection, tool]);
 
   const clearCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     const ctx = getContext();
     if (!canvas || !ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-  }, [getContext]);
+    pushHistory();
+  }, [getContext, pushHistory]);
 
   const exportDataUrl = useCallback(() => {
     const canvas = canvasRef.current;
@@ -202,6 +307,12 @@ export function useDrawingCanvas(initialMaterial: MaterialId = "wood") {
     setShadowIntensity,
     textureStrength,
     setTextureStrength,
+    shapeCorrection,
+    setShapeCorrection,
+    canUndo: historyReady ? canUndo : false,
+    canRedo: historyReady ? canRedo : false,
+    undo,
+    redo,
     handlePointerDown,
     handlePointerMove,
     handlePointerUp,
