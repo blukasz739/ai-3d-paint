@@ -51,6 +51,27 @@ export function WorkflowApp() {
       .catch(() => null);
   }, []);
 
+  useEffect(() => {
+    if (step !== "draw") return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      const mod = event.ctrlKey || event.metaKey;
+      if (!mod) return;
+
+      if (event.key === "z" && !event.shiftKey) {
+        event.preventDefault();
+        drawing.undo();
+      } else if (event.key === "y" || (event.key === "z" && event.shiftKey)) {
+        event.preventDefault();
+        drawing.redo();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- undo/redo są stabilne z useCallback
+  }, [step, drawing.undo, drawing.redo]);
+
   const handleContinueToReview = useCallback(() => {
     const canvas = drawing.canvasRef.current;
     if (!canvas) return;
@@ -209,12 +230,19 @@ export function WorkflowApp() {
                 onShadowIntensityChange={drawing.setShadowIntensity}
                 textureStrength={drawing.textureStrength}
                 onTextureStrengthChange={drawing.setTextureStrength}
+                shapeCorrection={drawing.shapeCorrection}
+                onShapeCorrectionChange={drawing.setShapeCorrection}
+                canUndo={drawing.canUndo}
+                canRedo={drawing.canRedo}
+                onUndo={drawing.undo}
+                onRedo={drawing.redo}
                 onClear={drawing.clearCanvas}
               />
             </div>
             <DrawingCanvas
               canvasRef={drawing.canvasRef}
               canvasSize={drawing.canvasSize}
+              tool={drawing.tool}
               onPointerDown={drawing.handlePointerDown}
               onPointerMove={drawing.handlePointerMove}
               onPointerUp={drawing.handlePointerUp}

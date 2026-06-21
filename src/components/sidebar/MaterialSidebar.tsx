@@ -19,6 +19,12 @@ interface MaterialSidebarProps {
   onShadowIntensityChange: (value: number) => void;
   textureStrength: number;
   onTextureStrengthChange: (value: number) => void;
+  shapeCorrection: boolean;
+  onShapeCorrectionChange: (enabled: boolean) => void;
+  canUndo: boolean;
+  canRedo: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
   onClear: () => void;
 }
 
@@ -37,6 +43,12 @@ export function MaterialSidebar({
   onShadowIntensityChange,
   textureStrength,
   onTextureStrengthChange,
+  shapeCorrection,
+  onShapeCorrectionChange,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
   onClear,
 }: MaterialSidebarProps) {
   return (
@@ -149,11 +161,11 @@ export function MaterialSidebar({
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
           Narzędzia
         </h2>
-        <div className="flex gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <button
             type="button"
             onClick={() => onToolChange("brush")}
-            className={`flex-1 rounded-lg border px-3 py-2 text-sm ${
+            className={`rounded-lg border px-3 py-2 text-sm ${
               tool === "brush"
                 ? "border-violet-500 bg-violet-500/10 text-white"
                 : "border-zinc-800 bg-zinc-900 text-zinc-300"
@@ -164,7 +176,7 @@ export function MaterialSidebar({
           <button
             type="button"
             onClick={() => onToolChange("eraser")}
-            className={`flex-1 rounded-lg border px-3 py-2 text-sm ${
+            className={`rounded-lg border px-3 py-2 text-sm ${
               tool === "eraser"
                 ? "border-violet-500 bg-violet-500/10 text-white"
                 : "border-zinc-800 bg-zinc-900 text-zinc-300"
@@ -172,7 +184,63 @@ export function MaterialSidebar({
           >
             Gumka
           </button>
+          <button
+            type="button"
+            onClick={() => onToolChange("fill")}
+            className={`rounded-lg border px-3 py-2 text-sm ${
+              tool === "fill"
+                ? "border-violet-500 bg-violet-500/10 text-white"
+                : "border-zinc-800 bg-zinc-900 text-zinc-300"
+            }`}
+          >
+            Wypełnij
+          </button>
         </div>
+      </div>
+
+      <div>
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+          Historia
+        </h2>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onUndo}
+            disabled={canUndo !== true}
+            className="flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-300 disabled:opacity-40"
+            title="Cofnij (Ctrl+Z)"
+          >
+            Cofnij
+          </button>
+          <button
+            type="button"
+            onClick={onRedo}
+            disabled={canRedo !== true}
+            className="flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-300 disabled:opacity-40"
+            title="Ponów (Ctrl+Y)"
+          >
+            Ponów
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+          Korekta kształtów
+        </h2>
+        <label className="flex cursor-pointer items-center gap-3 text-sm text-zinc-300">
+          <input
+            type="checkbox"
+            checked={shapeCorrection}
+            onChange={(e) => onShapeCorrectionChange(e.target.checked)}
+            className="h-4 w-4 rounded accent-violet-500"
+          />
+          Wyprostuj linie, koła i prostokąty (opcjonalnie)
+        </label>
+        <p className="mt-1 text-xs text-zinc-600">
+          Wyłączone domyślnie. Po puszczeniu pędzla szkic może zamienić się w
+          linię, okrąg lub prostokąt — rysowanie pozostaje swobodne.
+        </p>
       </div>
 
       <div>

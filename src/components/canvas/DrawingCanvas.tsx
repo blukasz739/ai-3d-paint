@@ -1,18 +1,27 @@
 "use client";
 
 import type { RefObject } from "react";
+import type { Tool } from "@/lib/types/workflow";
 
 interface DrawingCanvasProps {
   canvasRef: RefObject<HTMLCanvasElement | null>;
   canvasSize: number;
+  tool: Tool;
   onPointerDown: (event: React.PointerEvent<HTMLCanvasElement>) => void;
   onPointerMove: (event: React.PointerEvent<HTMLCanvasElement>) => void;
   onPointerUp: () => void;
 }
 
+const CURSOR: Record<Tool, string> = {
+  brush: "crosshair",
+  eraser: "cell",
+  fill: "pointer",
+};
+
 export function DrawingCanvas({
   canvasRef,
   canvasSize,
+  tool,
   onPointerDown,
   onPointerMove,
   onPointerUp,
@@ -24,8 +33,13 @@ export function DrawingCanvas({
           ref={canvasRef}
           width={canvasSize}
           height={canvasSize}
-          className="touch-none cursor-crosshair rounded-lg bg-white"
-          style={{ width: "min(100%, 512px)", height: "auto", aspectRatio: "1" }}
+          className="touch-none rounded-lg bg-white"
+          style={{
+            width: "min(100%, 512px)",
+            height: "auto",
+            aspectRatio: "1",
+            cursor: CURSOR[tool],
+          }}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
