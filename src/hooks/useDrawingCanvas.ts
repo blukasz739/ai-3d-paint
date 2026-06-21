@@ -1,66 +1,20 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import { createMaterialPattern } from "@/lib/canvas/patterns";
 import type { MaterialId, Tool } from "@/lib/types/workflow";
 import { MATERIALS } from "@/lib/types/workflow";
 
 const CANVAS_SIZE = 512;
 
-function createMaterialPattern(
-  ctx: CanvasRenderingContext2D,
-  material: MaterialId,
-  color: string,
-): CanvasPattern | string {
-  const patternCanvas = document.createElement("canvas");
-  patternCanvas.width = 16;
-  patternCanvas.height = 16;
-  const pctx = patternCanvas.getContext("2d");
-  if (!pctx) return color;
-
-  pctx.fillStyle = color;
-  pctx.fillRect(0, 0, 16, 16);
-
-  switch (material) {
-    case "wood":
-      pctx.strokeStyle = "rgba(0,0,0,0.15)";
-      for (let i = 0; i < 16; i += 4) {
-        pctx.beginPath();
-        pctx.moveTo(0, i);
-        pctx.lineTo(16, i + 1);
-        pctx.stroke();
-      }
-      break;
-    case "metal":
-      pctx.fillStyle = "rgba(255,255,255,0.35)";
-      pctx.fillRect(0, 0, 8, 16);
-      break;
-    case "glass":
-      pctx.fillStyle = "rgba(255,255,255,0.25)";
-      pctx.beginPath();
-      pctx.arc(8, 8, 6, 0, Math.PI * 2);
-      pctx.fill();
-      break;
-    case "stone":
-      pctx.fillStyle = "rgba(0,0,0,0.12)";
-      pctx.fillRect(2, 2, 5, 5);
-      pctx.fillRect(9, 7, 4, 4);
-      break;
-    case "plastic":
-      pctx.fillStyle = "rgba(255,255,255,0.2)";
-      pctx.fillRect(0, 0, 16, 4);
-      break;
-    case "fabric":
-      pctx.strokeStyle = "rgba(0,0,0,0.1)";
-      for (let i = 0; i < 16; i += 2) {
-        pctx.beginPath();
-        pctx.moveTo(i, 0);
-        pctx.lineTo(i, 16);
-        pctx.stroke();
-      }
-      break;
-  }
-
-  return ctx.createPattern(patternCanvas, "repeat") ?? color;
+export interface DrawSettings {
+  tool: Tool;
+  material: MaterialId;
+  color: string;
+  brushSize: number;
+  shadowEnabled: boolean;
+  shadowIntensity: number;
+  textureStrength: number;
 }
 
 export function useDrawingCanvas(initialMaterial: MaterialId = "wood") {
@@ -74,6 +28,9 @@ export function useDrawingCanvas(initialMaterial: MaterialId = "wood") {
     () => MATERIALS.find((m) => m.id === initialMaterial)?.swatch ?? "#ffffff",
   );
   const [brushSize, setBrushSize] = useState(8);
+  const [shadowEnabled, setShadowEnabled] = useState(true);
+  const [shadowIntensity, setShadowIntensity] = useState(40);
+  const [textureStrength, setTextureStrength] = useState(70);
 
   const setMaterial = useCallback((nextMaterial: MaterialId) => {
     setMaterialState(nextMaterial);
@@ -106,13 +63,37 @@ export function useDrawingCanvas(initialMaterial: MaterialId = "wood") {
     (
       from: { x: number; y: number },
       to: { x: number; y: number },
-      currentTool: Tool,
-      currentMaterial: MaterialId,
-      currentColor: string,
-      size: number,
+      settings: DrawSettings,
     ) => {
       const ctx = getContext();
       if (!ctx) return;
+
+      const {
+        tool: currentTool,
+        material: currentMaterial,
+        color: currentColor,
+        brushSize: size,
+        shadowEnabled: shadows,
+        shadowIntensity,
+        textureStrength: texture,
+      } = settings;
+
+      const shadowOffset = 2 + Math.round((shadowIntensity / 100) * 4);
+      const shadowAlpha = 0.1 + (shadowIntensity / 100) * 0.35;
+
+      if (currentTool === "brush" && shadows) {
+        ctx.save();
+        ctx.globalCompositeOperation = "source-over";
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.lineWidth = size;
+        ctx.strokeStyle = `rgba(0,0,0,${shadowAlpha})`;
+        ctx.beginPath();
+        ctx.moveTo(from.x + shadowOffset, from.y + shadowOffset);
+        ctx.lineTo(to.x + shadowOffset, to.y + shadowOffset);
+        ctx.stroke();
+        ctx.restore();
+      }
 
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
@@ -123,7 +104,12 @@ export function useDrawingCanvas(initialMaterial: MaterialId = "wood") {
         ctx.strokeStyle = "rgba(0,0,0,1)";
       } else {
         ctx.globalCompositeOperation = "source-over";
-        const pattern = createMaterialPattern(ctx, currentMaterial, currentColor);
+        const pattern = createMaterialPattern(
+          ctx,
+          currentMaterial,
+          currentColor,
+          texture,
+        );
         ctx.strokeStyle = pattern;
       }
 
@@ -136,6 +122,27 @@ export function useDrawingCanvas(initialMaterial: MaterialId = "wood") {
     [getContext],
   );
 
+  const getSettings = useCallback(
+    (): DrawSettings => ({
+      tool,
+      material,
+      color,
+      brushSize,
+      shadowEnabled,
+      shadowIntensity,
+      textureStrength,
+    }),
+    [
+      brushSize,
+      color,
+      material,
+      shadowEnabled,
+      shadowIntensity,
+      textureStrength,
+      tool,
+    ],
+  );
+
   const handlePointerDown = useCallback(
     (event: React.PointerEvent<HTMLCanvasElement>) => {
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -143,9 +150,9 @@ export function useDrawingCanvas(initialMaterial: MaterialId = "wood") {
       const point = getPoint(event);
       if (!point) return;
       lastPointRef.current = point;
-      drawLine(point, point, tool, material, color, brushSize);
+      drawLine(point, point, getSettings());
     },
-    [brushSize, color, drawLine, getPoint, material, tool],
+    [drawLine, getPoint, getSettings],
   );
 
   const handlePointerMove = useCallback(
@@ -154,10 +161,10 @@ export function useDrawingCanvas(initialMaterial: MaterialId = "wood") {
       const point = getPoint(event);
       const last = lastPointRef.current;
       if (!point || !last) return;
-      drawLine(last, point, tool, material, color, brushSize);
+      drawLine(last, point, getSettings());
       lastPointRef.current = point;
     },
-    [brushSize, color, drawLine, getPoint, material, tool],
+    [drawLine, getPoint, getSettings],
   );
 
   const handlePointerUp = useCallback(() => {
@@ -189,6 +196,12 @@ export function useDrawingCanvas(initialMaterial: MaterialId = "wood") {
     setColor,
     brushSize,
     setBrushSize,
+    shadowEnabled,
+    setShadowEnabled,
+    shadowIntensity,
+    setShadowIntensity,
+    textureStrength,
+    setTextureStrength,
     handlePointerDown,
     handlePointerMove,
     handlePointerUp,
