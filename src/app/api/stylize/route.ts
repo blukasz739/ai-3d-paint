@@ -9,6 +9,11 @@ interface StylizeBody {
   canvasDataUrl?: string;
   material?: MaterialId;
   style?: StyleId;
+  color?: string;
+}
+
+function isValidHexColor(color: string): boolean {
+  return /^#[0-9a-fA-F]{6}$/.test(color);
 }
 
 export async function GET() {
@@ -25,7 +30,7 @@ export async function POST(request: Request) {
 
   try {
     const body = (await request.json()) as StylizeBody;
-    const { canvasDataUrl, material, style } = body;
+    const { canvasDataUrl, material, style, color } = body;
 
     if (!canvasDataUrl?.startsWith("data:image/")) {
       return NextResponse.json(
@@ -49,8 +54,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid style" }, { status: 400 });
     }
 
+    if (!color || !isValidHexColor(color)) {
+      return NextResponse.json({ error: "Invalid color" }, { status: 400 });
+    }
+
     const replicate = getReplicateClient();
-    const prompt = buildStylizePrompt(material, style);
+    const prompt = buildStylizePrompt(material, style, color);
 
     const output = await replicate.run("google/nano-banana-2", {
       input: {
