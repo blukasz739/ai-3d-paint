@@ -13,6 +13,7 @@ import { useDrawingCanvas } from "@/hooks/useDrawingCanvas";
 import { isCanvasEmpty } from "@/lib/canvas/exportCanvas";
 import type {
   GenerationStatus,
+  MaterialId,
   ReviewStatus,
   StyleId,
   WorkflowStep,
@@ -34,6 +35,8 @@ export function WorkflowApp() {
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [drawMaterial, setDrawMaterial] = useState<MaterialId>("wood");
+  const [drawColor, setDrawColor] = useState("#8B5A2B");
 
   useEffect(() => {
     fetch("/api/stylize")
@@ -61,6 +64,8 @@ export function WorkflowApp() {
     if (!dataUrl) return;
 
     setOriginalUrl(dataUrl);
+    setDrawMaterial(drawing.material);
+    setDrawColor(drawing.color);
     setStylizedUrl(null);
     setReviewStatus("idle");
     setReviewError(null);
@@ -79,8 +84,9 @@ export function WorkflowApp() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           canvasDataUrl: originalUrl,
-          material: drawing.material,
+          material: drawMaterial,
           style,
+          color: drawColor,
         }),
       });
 
@@ -98,7 +104,7 @@ export function WorkflowApp() {
         error instanceof Error ? error.message : "Nie udało się stylizować obrazu",
       );
     }
-  }, [drawing.material, originalUrl, style]);
+  }, [drawColor, drawMaterial, originalUrl, style]);
 
   const pollPrediction = useCallback(async (predictionId: string) => {
     const response = await fetch(`/api/predictions/${predictionId}`);
@@ -197,6 +203,12 @@ export function WorkflowApp() {
                 onBrushSizeChange={drawing.setBrushSize}
                 color={drawing.color}
                 onColorChange={drawing.setColor}
+                shadowEnabled={drawing.shadowEnabled}
+                onShadowEnabledChange={drawing.setShadowEnabled}
+                shadowIntensity={drawing.shadowIntensity}
+                onShadowIntensityChange={drawing.setShadowIntensity}
+                textureStrength={drawing.textureStrength}
+                onTextureStrengthChange={drawing.setTextureStrength}
                 onClear={drawing.clearCanvas}
               />
             </div>
