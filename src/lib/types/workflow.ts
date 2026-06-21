@@ -29,7 +29,7 @@ export type GenerationStatus =
   | "succeeded"
   | "failed";
 
-export type Tool = "brush" | "eraser";
+export type Tool = "brush" | "eraser" | "fill";
 
 export interface MaterialOption {
   id: MaterialId;
