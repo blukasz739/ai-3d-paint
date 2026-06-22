@@ -16,6 +16,17 @@ cp .env.example .env.local
 
 Uzupełnij `REPLICATE_API_TOKEN` w pliku `.env.local`.
 
+## Deploy na Netlify
+
+1. W panelu Netlify: **Site configuration → Environment variables**
+2. Dodaj zmienną:
+   - **Key:** `REPLICATE_API_TOKEN`
+   - **Value:** token z [replicate.com/account/api-tokens](https://replicate.com/account/api-tokens)
+   - **Scopes:** Production (i opcjonalnie Deploy previews)
+3. **Trigger deploy** — sama zmiana zmiennej nie aktualizuje już działającej wersji bez nowego buildu.
+
+Plik `.env.local` **nie trafia** na Netlify — działa tylko lokalnie.
+
 ## Uruchomienie
 
 ```bash

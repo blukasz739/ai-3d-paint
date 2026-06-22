@@ -46,15 +46,28 @@ export function WorkflowApp() {
 
   useEffect(() => {
     fetch("/api/stylize")
-      .then((res) => res.json())
-      .then((data: { configured?: boolean }) => {
-        if (!data.configured) {
-          setConfigError(
-            "Brak REPLICATE_API_TOKEN — skopiuj .env.example do .env.local i uzupełnij token.",
-          );
-        }
+      .then((res) => {
+        if (!res.ok) throw new Error("api_unreachable");
+        return res.json();
       })
-      .catch(() => null);
+      .then((data: { configured?: boolean }) => {
+        if (data.configured) return;
+
+        const isLocal =
+          window.location.hostname === "localhost" ||
+          window.location.hostname === "127.0.0.1";
+
+        setConfigError(
+          isLocal
+            ? "Brak REPLICATE_API_TOKEN — skopiuj .env.example do .env.local i uzupełnij token."
+            : "Brak REPLICATE_API_TOKEN — w Netlify: Site configuration → Environment variables → dodaj REPLICATE_API_TOKEN, potem Trigger deploy.",
+        );
+      })
+      .catch(() => {
+        setConfigError(
+          "Nie można połączyć z API serwera. Sprawdź logi deployu na Netlify (build i Functions).",
+        );
+      });
   }, []);
 
   useEffect(() => {
