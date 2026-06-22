@@ -1,8 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { COLOR_PRESETS } from "@/lib/canvas/patterns";
-import { MATERIALS } from "@/lib/types/workflow";
-import type { MaterialId, Tool } from "@/lib/types/workflow";
+import { MATERIALS, SHAPE_KINDS } from "@/lib/types/workflow";
+import type { MaterialId, ShapeKind, Tool } from "@/lib/types/workflow";
 
 interface MaterialSidebarProps {
   material: MaterialId;
@@ -19,8 +20,10 @@ interface MaterialSidebarProps {
   onShadowIntensityChange: (value: number) => void;
   textureStrength: number;
   onTextureStrengthChange: (value: number) => void;
-  shapeCorrection: boolean;
-  onShapeCorrectionChange: (enabled: boolean) => void;
+  lineCorrection: boolean;
+  onLineCorrectionChange: (enabled: boolean) => void;
+  shapeKind: ShapeKind;
+  onShapeKindChange: (kind: ShapeKind) => void;
   canUndo: boolean;
   canRedo: boolean;
   onUndo: () => void;
@@ -43,16 +46,28 @@ export function MaterialSidebar({
   onShadowIntensityChange,
   textureStrength,
   onTextureStrengthChange,
-  shapeCorrection,
-  onShapeCorrectionChange,
+  lineCorrection,
+  onLineCorrectionChange,
+  shapeKind,
+  onShapeKindChange,
   canUndo,
   canRedo,
   onUndo,
   onRedo,
   onClear,
 }: MaterialSidebarProps) {
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  const undoEnabled = isClient && canUndo;
+  const redoEnabled = isClient && canRedo;
+  const colorValue = color.toLowerCase();
+
   return (
-    <aside className="flex w-full shrink-0 flex-col gap-5 border-r border-zinc-800 bg-zinc-950 p-4 lg:w-72 lg:overflow-y-auto lg:max-h-[calc(100vh-8rem)]">
+    <aside className="flex w-full shrink-0 flex-col gap-4 border-r border-zinc-800 bg-zinc-950 p-4 lg:w-72 lg:overflow-y-auto">
       <div>
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
           Materiały i tekstury
@@ -92,9 +107,6 @@ export function MaterialSidebar({
           onChange={(e) => onTextureStrengthChange(Number(e.target.value))}
           className="w-full accent-violet-500"
         />
-        <p className="mt-1 text-xs text-zinc-600">
-          0% = płaski kolor, 100% = pełna tekstura materiału
-        </p>
       </div>
 
       <div>
@@ -109,7 +121,7 @@ export function MaterialSidebar({
               onClick={() => onColorChange(preset)}
               title={preset}
               className={`aspect-square rounded-md border-2 transition hover:scale-105 ${
-                color.toLowerCase() === preset.toLowerCase()
+                colorValue === preset.toLowerCase()
                   ? "border-violet-400 ring-2 ring-violet-500/40"
                   : "border-zinc-700"
               }`}
@@ -118,19 +130,40 @@ export function MaterialSidebar({
           ))}
         </div>
         <label className="mb-2 block text-xs text-zinc-500">Własny kolor</label>
-        <input
-          type="color"
-          value={color}
-          onChange={(e) => onColorChange(e.target.value)}
-          className="h-10 w-full cursor-pointer rounded-lg border border-zinc-700 bg-zinc-900"
-        />
+        {isClient ? (
+          <input
+            type="color"
+            value={colorValue}
+            onChange={(e) => onColorChange(e.target.value)}
+            className="h-10 w-full cursor-pointer rounded-lg border border-zinc-700 bg-zinc-900"
+          />
+        ) : (
+          <div
+            className="h-10 w-full rounded-lg border border-zinc-700 bg-zinc-900"
+            style={{ backgroundColor: colorValue }}
+            aria-hidden
+          />
+        )}
       </div>
 
       <div>
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
           Cienie
         </h2>
-        <label className="mb-3 flex cursor-pointer items-center gap-3 text-sm text-zinc-300">
+        <label className="mb-2 flex items-center justify-between text-xs text-zinc-500">
+          <span>Natężenie cienia</span>
+          <span>{shadowIntensity}%</span>
+        </label>
+        <input
+          type="range"
+          min={10}
+          max={100}
+          value={shadowIntensity}
+          onChange={(e) => onShadowIntensityChange(Number(e.target.value))}
+          {...(shadowEnabled ? {} : { disabled: true })}
+          className="mb-3 w-full accent-violet-500 disabled:opacity-40"
+        />
+        <label className="flex cursor-pointer items-center gap-3 text-sm text-zinc-300">
           <input
             type="checkbox"
             checked={shadowEnabled}
@@ -139,22 +172,6 @@ export function MaterialSidebar({
           />
           Włącz cień przy rysowaniu
         </label>
-        {shadowEnabled && (
-          <>
-            <label className="mb-2 flex items-center justify-between text-xs text-zinc-500">
-              <span>Natężenie cienia</span>
-              <span>{shadowIntensity}%</span>
-            </label>
-            <input
-              type="range"
-              min={10}
-              max={100}
-              value={shadowIntensity}
-              onChange={(e) => onShadowIntensityChange(Number(e.target.value))}
-              className="w-full accent-violet-500"
-            />
-          </>
-        )}
       </div>
 
       <div>
@@ -206,7 +223,7 @@ export function MaterialSidebar({
           <button
             type="button"
             onClick={onUndo}
-            disabled={canUndo !== true}
+            {...(undoEnabled ? {} : { disabled: true })}
             className="flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-300 disabled:opacity-40"
             title="Cofnij (Ctrl+Z)"
           >
@@ -215,7 +232,7 @@ export function MaterialSidebar({
           <button
             type="button"
             onClick={onRedo}
-            disabled={canRedo !== true}
+            {...(redoEnabled ? {} : { disabled: true })}
             className="flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-300 disabled:opacity-40"
             title="Ponów (Ctrl+Y)"
           >
@@ -226,21 +243,39 @@ export function MaterialSidebar({
 
       <div>
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
-          Korekta kształtów
+          Wyprostowanie linii
         </h2>
         <label className="flex cursor-pointer items-center gap-3 text-sm text-zinc-300">
           <input
             type="checkbox"
-            checked={shapeCorrection}
-            onChange={(e) => onShapeCorrectionChange(e.target.checked)}
+            checked={lineCorrection}
+            onChange={(e) => onLineCorrectionChange(e.target.checked)}
             className="h-4 w-4 rounded accent-violet-500"
           />
-          Wyprostuj linie, koła i prostokąty (opcjonalnie)
+          Wyprostuj rysowaną linię
         </label>
-        <p className="mt-1 text-xs text-zinc-600">
-          Wyłączone domyślnie. Po puszczeniu pędzla szkic może zamienić się w
-          linię, okrąg lub prostokąt — rysowanie pozostaje swobodne.
-        </p>
+      </div>
+
+      <div>
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+          Kształty
+        </h2>
+        <div className="grid grid-cols-3 gap-2">
+          {SHAPE_KINDS.map((shape) => (
+            <button
+              key={shape.id}
+              type="button"
+              onClick={() => onShapeKindChange(shape.id)}
+              className={`rounded-lg border px-2 py-2 text-xs sm:text-sm ${
+                tool === "shape" && shapeKind === shape.id
+                  ? "border-violet-500 bg-violet-500/10 text-white"
+                  : "border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-600"
+              }`}
+            >
+              {shape.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div>

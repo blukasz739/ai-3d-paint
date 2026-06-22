@@ -3,12 +3,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { DrawingCanvas } from "@/components/canvas/DrawingCanvas";
-import { CanvasToolbar } from "@/components/canvas/CanvasToolbar";
 import { MaterialSidebar } from "@/components/sidebar/MaterialSidebar";
 import { StylePicker } from "@/components/styles/StylePicker";
 import { ImageReview } from "@/components/review/ImageReview";
 import { ModelViewer } from "@/components/viewer/ModelViewer";
 import { StepIndicator } from "@/components/workflow/StepIndicator";
+import {
+  DownloadStepLink,
+  HeaderBackButton,
+  PrimaryStepButton,
+  SuccessStepButton,
+  WorkflowStepAction,
+} from "@/components/workflow/WorkflowStepAction";
 import { useDrawingCanvas } from "@/hooks/useDrawingCanvas";
 import { isCanvasEmpty } from "@/lib/canvas/exportCanvas";
 import type {
@@ -191,13 +197,69 @@ export function WorkflowApp() {
     }
   }, [pollPrediction, stylizedUrl]);
 
+  const handleBackToDraw = useCallback(() => {
+    setStep("draw");
+  }, []);
+
+  const handleBackToReview = useCallback(() => {
+    setStep("review");
+    setGenerationStatus("idle");
+    setGenerationError(null);
+  }, []);
+
   const isGenerating3D =
     generationStatus === "starting" || generationStatus === "processing";
 
+  const canAcceptReview = reviewStatus === "ready" && Boolean(stylizedUrl);
+  const isStylizing = reviewStatus === "generating";
+
+  const headerAction = (
+    <WorkflowStepAction>
+      {step === "draw" && (
+        <PrimaryStepButton onClick={handleContinueToReview}>
+          Dalej: stylizacja
+        </PrimaryStepButton>
+      )}
+      {step === "review" && canAcceptReview && (
+        <SuccessStepButton
+          onClick={handleAcceptAndGenerate3D}
+          disabled={isGenerating3D}
+        >
+          {isGenerating3D ? "Generowanie 3D…" : "Akceptuj i generuj 3D"}
+        </SuccessStepButton>
+      )}
+      {step === "review" && !canAcceptReview && (
+        <PrimaryStepButton
+          onClick={handleStylize}
+          disabled={!originalUrl || isStylizing}
+        >
+          {isStylizing ? "Przekształcanie…" : "Przekształć w przedmiot"}
+        </PrimaryStepButton>
+      )}
+      {step === "model" && modelUrl && (
+        <DownloadStepLink href={modelUrl}>Pobierz .glb</DownloadStepLink>
+      )}
+      {step === "model" && !modelUrl && isGenerating3D && (
+        <PrimaryStepButton disabled>Generowanie modelu…</PrimaryStepButton>
+      )}
+    </WorkflowStepAction>
+  );
+
+  const headerLeading =
+    step === "review" ? (
+      <HeaderBackButton onClick={handleBackToDraw} disabled={isGenerating3D}>
+        ← Wróć do rysowania
+      </HeaderBackButton>
+    ) : step === "model" ? (
+      <HeaderBackButton onClick={handleBackToReview}>
+        ← Wróć do stylizacji
+      </HeaderBackButton>
+    ) : undefined;
+
   return (
-    <AppShell>
+    <AppShell headerAction={headerAction} headerLeading={headerLeading}>
       {configError && (
-        <div className="border-b border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+        <div className="shrink-0 border-b border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
           {configError}
         </div>
       )}
@@ -205,16 +267,18 @@ export function WorkflowApp() {
       <StepIndicator currentStep={step} />
 
       {step === "draw" && (
-        <>
-          <div className="flex flex-1 flex-col lg:flex-row">
-            <button
-              type="button"
-              className="border-b border-zinc-800 px-4 py-2 text-left text-sm text-zinc-400 lg:hidden"
-              onClick={() => setSidebarOpen((v) => !v)}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <button
+            type="button"
+            className="shrink-0 border-b border-zinc-800 px-4 py-2 text-left text-sm text-zinc-400 lg:hidden"
+            onClick={() => setSidebarOpen((v) => !v)}
+          >
+            {sidebarOpen ? "Ukryj panel" : "Pokaż materiały i narzędzia"}
+          </button>
+          <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+            <div
+              className={`${sidebarOpen ? "block" : "hidden"} shrink-0 lg:block lg:overflow-y-auto`}
             >
-              {sidebarOpen ? "Ukryj panel" : "Pokaż materiały i narzędzia"}
-            </button>
-            <div className={`${sidebarOpen ? "block" : "hidden"} lg:block`}>
               <MaterialSidebar
                 material={drawing.material}
                 onMaterialChange={drawing.setMaterial}
@@ -230,8 +294,10 @@ export function WorkflowApp() {
                 onShadowIntensityChange={drawing.setShadowIntensity}
                 textureStrength={drawing.textureStrength}
                 onTextureStrengthChange={drawing.setTextureStrength}
-                shapeCorrection={drawing.shapeCorrection}
-                onShapeCorrectionChange={drawing.setShapeCorrection}
+                lineCorrection={drawing.lineCorrection}
+                onLineCorrectionChange={drawing.setLineCorrection}
+                shapeKind={drawing.shapeKind}
+                onShapeKindChange={drawing.setShapeKind}
                 canUndo={drawing.canUndo}
                 canRedo={drawing.canRedo}
                 onUndo={drawing.undo}
@@ -239,21 +305,22 @@ export function WorkflowApp() {
                 onClear={drawing.clearCanvas}
               />
             </div>
-            <DrawingCanvas
-              canvasRef={drawing.canvasRef}
-              canvasSize={drawing.canvasSize}
-              tool={drawing.tool}
-              onPointerDown={drawing.handlePointerDown}
-              onPointerMove={drawing.handlePointerMove}
-              onPointerUp={drawing.handlePointerUp}
-            />
+            <div className="min-h-0 min-w-0 flex-1">
+              <DrawingCanvas
+                canvasRef={drawing.canvasRef}
+                canvasSize={drawing.canvasSize}
+                tool={drawing.tool}
+                onPointerDown={drawing.handlePointerDown}
+                onPointerMove={drawing.handlePointerMove}
+                onPointerUp={drawing.handlePointerUp}
+              />
+            </div>
           </div>
-          <CanvasToolbar onContinue={handleContinueToReview} />
-        </>
+        </div>
       )}
 
       {step === "review" && (
-        <div className="flex flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           <div className="border-b border-zinc-800 p-4 lg:px-8">
             <StylePicker style={style} onStyleChange={setStyle} />
           </div>
@@ -262,25 +329,14 @@ export function WorkflowApp() {
             stylizedUrl={stylizedUrl}
             status={reviewStatus}
             error={reviewError}
-            onStylize={handleStylize}
             onRegenerate={handleStylize}
-            onAccept={handleAcceptAndGenerate3D}
             isGenerating3D={isGenerating3D}
           />
-          <div className="border-t border-zinc-800 px-4 py-3">
-            <button
-              type="button"
-              onClick={() => setStep("draw")}
-              className="text-sm text-zinc-400 hover:text-zinc-200"
-            >
-              ← Wróć do rysowania
-            </button>
-          </div>
         </div>
       )}
 
       {step === "model" && (
-        <div className="flex flex-1 flex-col gap-6 p-4 lg:p-8">
+        <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-4 lg:p-8">
           <div>
             <h2 className="mb-1 text-lg font-semibold">Twój model 3D</h2>
             <p className="text-sm text-zinc-500">
@@ -297,26 +353,6 @@ export function WorkflowApp() {
 
           {modelUrl && (
             <div className="flex flex-wrap gap-3">
-              <a
-                href={modelUrl}
-                download="model.glb"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded-lg bg-violet-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-violet-500"
-              >
-                Pobierz .glb
-              </a>
-              <button
-                type="button"
-                onClick={() => {
-                  setStep("review");
-                  setGenerationStatus("idle");
-                  setGenerationError(null);
-                }}
-                className="rounded-lg border border-zinc-600 px-5 py-2.5 text-sm text-zinc-200 hover:border-zinc-400"
-              >
-                Wróć do review
-              </button>
               <button
                 type="button"
                 onClick={() => {

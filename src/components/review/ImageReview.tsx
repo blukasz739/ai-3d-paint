@@ -7,9 +7,7 @@ interface ImageReviewProps {
   stylizedUrl: string | null;
   status: ReviewStatus;
   error: string | null;
-  onStylize: () => void;
   onRegenerate: () => void;
-  onAccept: () => void;
   isGenerating3D: boolean;
 }
 
@@ -18,9 +16,7 @@ export function ImageReview({
   stylizedUrl,
   status,
   error,
-  onStylize,
   onRegenerate,
-  onAccept,
   isGenerating3D,
 }: ImageReviewProps) {
   const isGenerating = status === "generating";
@@ -85,36 +81,15 @@ export function ImageReview({
       </p>
 
       <div className="flex flex-wrap gap-3">
-        {status === "idle" || status === "error" ? (
+        {canAccept ? (
           <button
             type="button"
-            onClick={onStylize}
-            disabled={!originalUrl || isGenerating}
-            className="rounded-lg bg-violet-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-violet-500 disabled:opacity-40"
+            onClick={onRegenerate}
+            disabled={isGenerating || isGenerating3D}
+            className="rounded-lg border border-zinc-600 px-5 py-2.5 text-sm text-zinc-200 hover:border-zinc-400 disabled:opacity-40"
           >
-            Przekształć w przedmiot
+            Regeneruj
           </button>
-        ) : null}
-
-        {canAccept ? (
-          <>
-            <button
-              type="button"
-              onClick={onRegenerate}
-              disabled={isGenerating || isGenerating3D}
-              className="rounded-lg border border-zinc-600 px-5 py-2.5 text-sm text-zinc-200 hover:border-zinc-400 disabled:opacity-40"
-            >
-              Regeneruj
-            </button>
-            <button
-              type="button"
-              onClick={onAccept}
-              disabled={isGenerating3D}
-              className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-40"
-            >
-              {isGenerating3D ? "Generowanie 3D…" : "Akceptuj i generuj 3D"}
-            </button>
-          </>
         ) : null}
       </div>
     </div>

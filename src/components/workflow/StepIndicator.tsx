@@ -11,7 +11,7 @@ export function StepIndicator({ currentStep }: StepIndicatorProps) {
   const currentIndex = WORKFLOW_STEPS.findIndex((s) => s.id === currentStep);
 
   return (
-    <nav className="flex items-center gap-2 border-b border-zinc-800 bg-zinc-950 px-4 py-4 lg:px-8">
+    <nav className="flex shrink-0 items-center gap-2 border-b border-zinc-800 bg-zinc-950 px-4 py-3 lg:px-8">
       {WORKFLOW_STEPS.map((step, index) => {
         const isActive = step.id === currentStep;
         const isDone = index < currentIndex;

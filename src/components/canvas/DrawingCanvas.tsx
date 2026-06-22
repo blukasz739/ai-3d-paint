@@ -16,6 +16,7 @@ const CURSOR: Record<Tool, string> = {
   brush: "crosshair",
   eraser: "cell",
   fill: "pointer",
+  shape: "crosshair",
 };
 
 export function DrawingCanvas({
@@ -27,7 +28,7 @@ export function DrawingCanvas({
   onPointerUp,
 }: DrawingCanvasProps) {
   return (
-    <div className="flex flex-1 items-center justify-center p-4 lg:p-8">
+    <div className="flex min-h-0 flex-1 items-center justify-center p-3 lg:p-4">
       <div className="rounded-xl border border-zinc-700 bg-zinc-900 p-2 shadow-2xl shadow-black/40">
         <canvas
           ref={canvasRef}
