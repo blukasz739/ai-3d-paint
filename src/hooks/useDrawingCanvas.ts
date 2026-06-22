@@ -10,8 +10,11 @@ import {
   interpolateStrokePoints,
 } from "@/lib/canvas/drawPrimitives";
 import { floodFill, type Point } from "@/lib/canvas/floodFill";
-import { detectShape } from "@/lib/canvas/shapeCorrection";
-import type { MaterialId, Tool } from "@/lib/types/workflow";
+import {
+  buildShapeFromBox,
+  detectLine,
+} from "@/lib/canvas/shapeCorrection";
+import type { MaterialId, ShapeKind, Tool } from "@/lib/types/workflow";
 import { MATERIALS } from "@/lib/types/workflow";
 
 export type { DrawSettings } from "@/lib/canvas/drawSettings";
@@ -37,7 +40,8 @@ export function useDrawingCanvas(initialMaterial: MaterialId = "wood") {
   const [shadowEnabled, setShadowEnabled] = useState(true);
   const [shadowIntensity, setShadowIntensity] = useState(40);
   const [textureStrength, setTextureStrength] = useState(70);
-  const [shapeCorrection, setShapeCorrection] = useState(false);
+  const [lineCorrection, setLineCorrection] = useState(false);
+  const [shapeKind, setShapeKindState] = useState<ShapeKind>("rectangle");
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
   const [historyReady, setHistoryReady] = useState(false);
@@ -153,6 +157,23 @@ export function useDrawingCanvas(initialMaterial: MaterialId = "wood") {
     ],
   );
 
+  const setShapeKind = useCallback((kind: ShapeKind) => {
+    setShapeKindState(kind);
+    setTool("shape");
+  }, []);
+
+  const drawShapePreview = useCallback(
+    (ctx: CanvasRenderingContext2D, from: Point, to: Point) => {
+      if (!strokeSnapshotRef.current) return;
+      ctx.putImageData(strokeSnapshotRef.current, 0, 0);
+      const shape = buildShapeFromBox(from, to, shapeKind);
+      if (shape) {
+        drawCorrectedShape(ctx, shape, getSettings());
+      }
+    },
+    [getSettings, shapeKind],
+  );
+
   const appendFreehandPoint = useCallback(
     (ctx: CanvasRenderingContext2D, point: Point) => {
       const settings = getSettings();
@@ -194,9 +215,8 @@ export function useDrawingCanvas(initialMaterial: MaterialId = "wood") {
       strokePointsRef.current = [point];
 
       const settings = getSettings();
-      drawSegment(ctx, point, point, settings);
 
-      if (tool === "brush" && shapeCorrection) {
+      if (tool === "shape" || (tool === "brush" && lineCorrection)) {
         strokeSnapshotRef.current = ctx.getImageData(
           0,
           0,
@@ -205,6 +225,7 @@ export function useDrawingCanvas(initialMaterial: MaterialId = "wood") {
         );
       } else {
         strokeSnapshotRef.current = null;
+        drawSegment(ctx, point, point, settings);
       }
     },
     [
@@ -213,9 +234,9 @@ export function useDrawingCanvas(initialMaterial: MaterialId = "wood") {
       getContext,
       getPoint,
       getSettings,
+      lineCorrection,
       material,
       pushHistory,
-      shapeCorrection,
       textureStrength,
       tool,
     ],
@@ -225,12 +246,15 @@ export function useDrawingCanvas(initialMaterial: MaterialId = "wood") {
     (event: React.PointerEvent<HTMLCanvasElement>) => {
       if (!isDrawingRef.current || tool === "fill") return;
       const point = getPoint(event);
-      if (!point || !lastPointRef.current) return;
+      const start = strokePointsRef.current[0];
+      if (!point || !lastPointRef.current || !start) return;
 
       const ctx = getContext();
       if (!ctx) return;
 
-      if (tool === "brush") {
+      if (tool === "shape") {
+        drawShapePreview(ctx, start, point);
+      } else if (tool === "brush") {
         appendFreehandPoint(ctx, point);
       } else {
         const last = lastPointRef.current;
@@ -240,7 +264,14 @@ export function useDrawingCanvas(initialMaterial: MaterialId = "wood") {
 
       lastPointRef.current = point;
     },
-    [appendFreehandPoint, getContext, getPoint, getSettings, tool],
+    [
+      appendFreehandPoint,
+      drawShapePreview,
+      getContext,
+      getPoint,
+      getSettings,
+      tool,
+    ],
   );
 
   const handlePointerUp = useCallback(() => {
@@ -249,19 +280,31 @@ export function useDrawingCanvas(initialMaterial: MaterialId = "wood") {
     const ctx = getContext();
     const settings = getSettings();
     const points = strokePointsRef.current;
+    const start = points[0];
+    const end = points[points.length - 1];
 
-    if (ctx && settings.tool === "brush" && points.length > 1) {
-      drawFreehandCap(ctx, points, settings);
-
-      if (
-        shapeCorrection &&
-        strokeSnapshotRef.current &&
-        points.length > 3
-      ) {
-        const shape = detectShape(points);
-        if (shape.type !== "freehand") {
+    if (ctx && start && end) {
+      if (tool === "shape") {
+        const shape = buildShapeFromBox(start, end, shapeKind);
+        if (shape && strokeSnapshotRef.current) {
           ctx.putImageData(strokeSnapshotRef.current, 0, 0);
           drawCorrectedShape(ctx, shape, settings);
+        }
+      } else if (tool === "brush" && points.length > 1) {
+        const line =
+          lineCorrection && strokeSnapshotRef.current && points.length > 3
+            ? detectLine(points)
+            : null;
+
+        if (line) {
+          ctx.putImageData(strokeSnapshotRef.current!, 0, 0);
+          drawCorrectedShape(
+            ctx,
+            { type: "line", from: line.from, to: line.to },
+            settings,
+          );
+        } else {
+          drawFreehandCap(ctx, points, settings);
         }
       }
     }
@@ -274,7 +317,14 @@ export function useDrawingCanvas(initialMaterial: MaterialId = "wood") {
     if (tool !== "fill") {
       pushHistory();
     }
-  }, [getContext, getSettings, pushHistory, shapeCorrection, tool]);
+  }, [
+    getContext,
+    getSettings,
+    lineCorrection,
+    pushHistory,
+    shapeKind,
+    tool,
+  ]);
 
   const clearCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -307,8 +357,10 @@ export function useDrawingCanvas(initialMaterial: MaterialId = "wood") {
     setShadowIntensity,
     textureStrength,
     setTextureStrength,
-    shapeCorrection,
-    setShapeCorrection,
+    lineCorrection,
+    setLineCorrection,
+    shapeKind,
+    setShapeKind,
     canUndo: historyReady ? canUndo : false,
     canRedo: historyReady ? canRedo : false,
     undo,

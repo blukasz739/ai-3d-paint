@@ -183,7 +183,7 @@ export function drawSmoothVertexJoin(
 
 function drawShadowStroke(
   ctx: CanvasRenderingContext2D,
-  draw: () => void,
+  draw: (shadowPass: boolean) => void,
   settings: DrawSettings,
   options?: { lineCap?: CanvasLineCap },
 ): void {
@@ -191,7 +191,7 @@ function drawShadowStroke(
   const lineCap = options?.lineCap ?? "round";
 
   if (!shadowEnabled || settings.tool === "eraser") {
-    draw();
+    draw(false);
     return;
   }
 
@@ -205,10 +205,10 @@ function drawShadowStroke(
   ctx.lineJoin = "round";
   ctx.lineWidth = brushSize;
   ctx.strokeStyle = `rgba(0,0,0,${shadowAlpha})`;
-  draw();
+  draw(true);
   ctx.restore();
 
-  draw();
+  draw(false);
 }
 
 export function drawSegment(
@@ -217,13 +217,17 @@ export function drawSegment(
   to: Point,
   settings: DrawSettings,
 ): void {
-  drawShadowStroke(ctx, () => {
-    applyStrokeStyle(ctx, settings);
-    ctx.beginPath();
-    ctx.moveTo(from.x, from.y);
-    ctx.lineTo(to.x, to.y);
-    ctx.stroke();
-  }, settings);
+  drawShadowStroke(
+    ctx,
+    (shadowPass) => {
+      if (!shadowPass) applyStrokeStyle(ctx, settings);
+      ctx.beginPath();
+      ctx.moveTo(from.x, from.y);
+      ctx.lineTo(to.x, to.y);
+      ctx.stroke();
+    },
+    settings,
+  );
   ctx.globalCompositeOperation = "source-over";
 }
 
@@ -251,13 +255,17 @@ export function drawFreehandSegment(
   const start = midpoint(p0, p1);
   const end = midpoint(p1, p2);
 
-  drawShadowStroke(ctx, () => {
-    applyStrokeStyle(ctx, settings);
-    ctx.beginPath();
-    ctx.moveTo(start.x, start.y);
-    ctx.quadraticCurveTo(p1.x, p1.y, end.x, end.y);
-    ctx.stroke();
-  }, settings);
+  drawShadowStroke(
+    ctx,
+    (shadowPass) => {
+      if (!shadowPass) applyStrokeStyle(ctx, settings);
+      ctx.beginPath();
+      ctx.moveTo(start.x, start.y);
+      ctx.quadraticCurveTo(p1.x, p1.y, end.x, end.y);
+      ctx.stroke();
+    },
+    settings,
+  );
   ctx.globalCompositeOperation = "source-over";
 }
 
@@ -273,13 +281,17 @@ export function drawFreehandCap(
   const p2 = points[points.length - 1];
   const start = midpoint(p1, p2);
 
-  drawShadowStroke(ctx, () => {
-    applyStrokeStyle(ctx, settings);
-    ctx.beginPath();
-    ctx.moveTo(start.x, start.y);
-    ctx.lineTo(p2.x, p2.y);
-    ctx.stroke();
-  }, settings);
+  drawShadowStroke(
+    ctx,
+    (shadowPass) => {
+      if (!shadowPass) applyStrokeStyle(ctx, settings);
+      ctx.beginPath();
+      ctx.moveTo(start.x, start.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
+    },
+    settings,
+  );
   ctx.globalCompositeOperation = "source-over";
 }
 
@@ -316,8 +328,8 @@ export function drawCorrectedShape(
 
   drawShadowStroke(
     ctx,
-    () => {
-      applyStrokeStyle(ctx, settings);
+    (shadowPass) => {
+      if (!shadowPass) applyStrokeStyle(ctx, settings);
 
       ctx.beginPath();
       switch (shape.type) {
@@ -326,6 +338,12 @@ export function drawCorrectedShape(
           break;
         case "rectangle":
           ctx.rect(shape.x, shape.y, shape.w, shape.h);
+          break;
+        case "triangle":
+          ctx.moveTo(shape.x + shape.w / 2, shape.y);
+          ctx.lineTo(shape.x, shape.y + shape.h);
+          ctx.lineTo(shape.x + shape.w, shape.y + shape.h);
+          ctx.closePath();
           break;
       }
       ctx.stroke();

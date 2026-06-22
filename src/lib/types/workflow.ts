@@ -29,7 +29,15 @@ export type GenerationStatus =
   | "succeeded"
   | "failed";
 
-export type Tool = "brush" | "eraser" | "fill";
+export type Tool = "brush" | "eraser" | "fill" | "shape";
+
+export type ShapeKind = "rectangle" | "triangle" | "circle";
+
+export const SHAPE_KINDS: { id: ShapeKind; label: string }[] = [
+  { id: "rectangle", label: "Prostokąt" },
+  { id: "triangle", label: "Trójkąt" },
+  { id: "circle", label: "Koło" },
+];
 
 export interface MaterialOption {
   id: MaterialId;
